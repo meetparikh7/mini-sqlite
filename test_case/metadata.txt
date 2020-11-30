@@ -1,0 +1,9 @@
+<begin A>
+col1
+col2
+<end>
+<begin B>
+colX
+colY
+colZ
+<end>

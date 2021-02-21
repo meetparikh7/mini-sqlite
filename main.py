@@ -55,6 +55,7 @@ class Table:
         with open(os.path.join(dirpath, f"{name}.csv")) as f:
             reader = csv.reader(f)
             for row in reader:
+                row = [int(v) for v in row]
                 self.data.append(row)
 
     def debug(self):
@@ -82,6 +83,7 @@ class Query:
         self.tables = []
         self.cols = "*"
         self.distinct = False
+        self.where_clause = None
         for token in it:
             if (
                 token.ttype == sqlparse.tokens.Keyword.DML
@@ -236,6 +238,52 @@ class Query:
         if len(tables) > 1:
             self.join_tables(tables[1:])
 
+    # Uses lispy condition, to check a row, (nested) tuples of form (operator, operand1, operand2)
+    def check_row(self, row, cols, condition):
+        def get_comparision_lambda(op):
+            if op == ">":
+                return lambda op1, op2: op1 > op2
+            elif op == "<":
+                return lambda op1, op2: op1 < op2
+            elif op == ">=":
+                return lambda op1, op2: op1 >= op2
+            elif op == "<=":
+                return lambda op1, op2: op1 <= op2
+            elif op == "!=" or op == "~=":
+                return lambda op1, op2: op1 != op2
+            else:
+                return lambda op1, op2: op1 == op2
+
+        if len(condition) != 3:  # Some invalid condition, dont accept any row
+            return False
+        if condition[0] == "AND":
+            return self.check_row(row, cols, condition[1]) and self.check_row(
+                row, cols, condition[2]
+            )
+        elif condition[0] == "OR":
+            return self.check_row(row, cols, condition[1]) or self.check_row(
+                row, cols, condition[2]
+            )
+        elif type(condition[1]) is str:
+            op = condition[0]
+            field1 = row[cols.index(condition[1])]
+            if type(condition[2]) is str:
+                field2 = row[cols.index(condition[2])]
+            else:
+                field2 = condition[2]
+            return get_comparision_lambda(op)(field1, field2)
+        else:
+            return False
+
+    def filter_rows(self):
+        if self.where_clause is None:
+            return
+        new_vtable = []
+        for row in self.vtable:
+            if self.check_row(row, self.vtable_cols, self.where_clause):
+                new_vtable.append(row)
+        self.vtable = new_vtable
+
     def filter_distinct(self):
         if not self.distinct:
             return
@@ -250,6 +298,7 @@ class Query:
         self.vtable = []
         self.vtable_cols = []
         self.join_tables(self.tables)
+        self.filter_rows()
         self.filter_distinct()
         return self.vtable_cols, self.vtable
 

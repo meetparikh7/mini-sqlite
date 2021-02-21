@@ -66,22 +66,32 @@ class Query:
     def __init__(self, query_str, all_tables):
         self.all_tables = all_tables
         self.query = sqlparse.parse(query_str.strip())[0]
-        self.query.tokens = [token for token in self.query.tokens if token.ttype != sqlparse.tokens.Whitespace]
+        self.query.tokens = [
+            token
+            for token in self.query.tokens
+            if token.ttype != sqlparse.tokens.Whitespace
+        ]
         print(self.query.tokens)
         print([token.ttype for token in self.query.tokens])
 
         # Hacky parsing of the query
         if self.query.get_type() != "SELECT":
-            raise NotImplementedError('Only select query is supported as of now')
+            raise NotImplementedError("Only select query is supported as of now")
 
         it = iter(self.query.tokens)
         self.tables = []
         self.cols = "*"
         self.distinct = False
         for token in it:
-            if token.ttype == sqlparse.tokens.Keyword.DML and token.value.upper() == "SELECT":
+            if (
+                token.ttype == sqlparse.tokens.Keyword.DML
+                and token.value.upper() == "SELECT"
+            ):
                 token = next(it, None)
-                if type(token) is sqlparse.sql.Token and token.value.upper() == "DISTINCT":
+                if (
+                    type(token) is sqlparse.sql.Token
+                    and token.value.upper() == "DISTINCT"
+                ):
                     self.distinct = True
                     token = next(it, None)
                 if type(token) is sqlparse.sql.Identifier:
@@ -92,21 +102,94 @@ class Query:
                     self.cols = "*"
                 else:
                     print(type(token), token)
-            elif token.ttype == sqlparse.tokens.Keyword and token.value.upper() == "FROM":
+            elif (
+                token.ttype == sqlparse.tokens.Keyword and token.value.upper() == "FROM"
+            ):
                 token = next(it, None)
                 if type(token) is sqlparse.sql.Identifier:
                     self.tables = [token.value]
                 elif type(token) is sqlparse.sql.IdentifierList:
                     self.tables = [token.value for token in token.get_identifiers()]
                 else:
-                    raise ValueError('No table after from clause in query \n %s' % (query_str))
+                    raise ValueError(
+                        "No table after from clause in query \n %s" % (query_str)
+                    )
+            elif type(token) == sqlparse.sql.Where:
+                self.where_clause = self.parse_condition_clause(token.tokens[1:])
+                print("where_clause", self.where_clause)
 
         self.check_tables()
+
+    # Creates a lispy expr tree
+    def parse_condition_clause(self, condition_clause):
+        # Remove whitespace
+        condition_clause = [
+            token
+            for token in condition_clause
+            if token.ttype != sqlparse.tokens.Whitespace
+        ]
+
+        # Handle parenthesis
+        while (
+            len(condition_clause) == 1
+            and type(condition_clause[0]) == sqlparse.sql.Parenthesis
+        ):
+            condition_clause = condition_clause[0].tokens[1:-1]
+            condition_clause = [
+                token
+                for token in condition_clause
+                if token.ttype != sqlparse.tokens.Whitespace
+            ]
+
+        # There are two ways of simple comparison
+        simple_condition_tokens = []
+        if (
+            len(condition_clause) == 1
+            and type(condition_clause[0]) == sqlparse.sql.Comparison
+        ):
+            simple_condition_tokens = condition_clause[0].tokens
+            simple_condition_tokens = [
+                token
+                for token in simple_condition_tokens
+                if token.ttype != sqlparse.tokens.Whitespace
+            ]
+        elif (
+            len(condition_clause) == 3
+            and condition_clause[1].ttype == sqlparse.tokens.Operator.Comparison
+        ):
+            simple_condition_tokens = condition_clause
+        # Simple comparisions
+        if len(simple_condition_tokens) == 3:
+            op = simple_condition_tokens[1].value
+            # Operand must be colname or int, since only int values in database
+            operand1 = (
+                simple_condition_tokens[0].value
+                if type(simple_condition_tokens[0]) is sqlparse.sql.Identifier
+                else int(simple_condition_tokens[0].value)
+            )
+            operand2 = (
+                simple_condition_tokens[2].value
+                if type(simple_condition_tokens[2]) is sqlparse.sql.Identifier
+                else int(simple_condition_tokens[2].value)
+            )
+            return (op, operand1, operand2)
+
+        # Compound stataments
+        if len(condition_clause) == 3 and condition_clause[1].value.upper() in [
+            "AND",
+            "OR",
+        ]:
+            return (
+                condition_clause[1].value.upper(),
+                self.parse_condition_clause([condition_clause[0]]),
+                self.parse_condition_clause([condition_clause[2]]),
+            )
+        return ()
 
     def check_tables(self):
         for table in self.tables:
             if table not in self.all_tables.tables.keys():
-                raise ValueError('Invalid table %s in query' % (table))
+                raise ValueError("Invalid table %s in query" % (table))
 
     def debug(self):
         print("Debugging query", self.query)
@@ -135,7 +218,9 @@ class Query:
                 else:
                     cur_vtable_cols.append(col)
         for row in table.data:
-            filtered_row = [cell for index, cell in enumerate(row) if index in cols_to_keep]
+            filtered_row = [
+                cell for index, cell in enumerate(row) if index in cols_to_keep
+            ]
             cur_vtable.append(filtered_row)
         if len(self.vtable) == 0:
             self.vtable = cur_vtable

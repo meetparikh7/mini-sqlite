@@ -22,3 +22,17 @@ SELECT colX, colZ, col1 FROM A, B WHERE (colX=98 AND colZ=7) OR col1>2
 -- select rows (colX, colZ) from A and B where (colX=98 and colZ=7) OR col1>2
 SELECT colX, colZ FROM A, B WHERE (colX=98 AND colZ=7) OR col1 > 2
 ```
+
+## Usage
+
+```bash
+# Normal REPL, must specify data directory
+$ python main.py test_case/
+>> SELECT * FROM A
+...
+>> ^D or exit
+# Single query
+$ python main.py test_case/ "SELECT col1, colX FROM A, B"
+# Debug mode
+$ DEBUG=1 python main.py test_case/ "SELECT colX, colZ, col1 FROM A, B WHERE (colX=98 AND colZ=7) OR col1>2"
+```

@@ -72,8 +72,6 @@ class Query:
             for token in self.query.tokens
             if token.ttype != sqlparse.tokens.Whitespace
         ]
-        print(self.query.tokens)
-        print([token.ttype for token in self.query.tokens])
 
         # Hacky parsing of the query
         if self.query.get_type() != "SELECT":
@@ -104,7 +102,9 @@ class Query:
                     self.cols = "*"
                 else:
                     print(type(token), token)
-                self.selected_cols = '*' if self.cols == '*' else [col for col in self.cols]
+                self.selected_cols = (
+                    "*" if self.cols == "*" else [col for col in self.cols]
+                )
             elif (
                 token.ttype == sqlparse.tokens.Keyword and token.value.upper() == "FROM"
             ):
@@ -119,8 +119,6 @@ class Query:
                     )
             elif type(token) == sqlparse.sql.Where:
                 self.where_clause = self.parse_condition_clause(token.tokens[1:])
-                print("where_clause", self.where_clause)
-
         self.check_tables()
 
     # Creates a lispy expr tree
@@ -202,9 +200,12 @@ class Query:
     def debug(self):
         print("Debugging query", self.query)
         print("Selecting")
+        if self.distinct:
+            print("Distinct")
         print("Cols", self.cols)
         print("Selected cols", self.selected_cols)
         print("From", self.tables)
+        print("Where", self.where_clause)
 
     def join_tables(self, tables):
         # Assume temporarily only one table
@@ -325,10 +326,31 @@ class Query:
         return self.vtable_cols, self.vtable
 
 
-if __name__ == "__main__":
-    tables = Tables(sys.argv[1])
-    tables.debug()
-    query = Query(sys.argv[2], tables)
-    query.debug()
+def execute_query(query, tables):
+    query = Query(query, tables)
+    if os.environ.get("DEBUG", False):
+        query.debug()
     result_cols, result_data = query.execute()
     print_table(result_cols, result_data)
+
+
+def repl(tables):
+    print("Mini-SQLite REPL: Press ^D or type exit to exit")
+    while True:
+        try:
+            query = input(">> ")
+            if query.strip().lower() == "exit":
+                break
+            execute_query(query, tables)
+        except EOFError:
+            break
+
+
+if __name__ == "__main__":
+    tables = Tables(sys.argv[1])
+    if os.environ.get("DEBUG", False):
+        tables.debug()
+    if len(sys.argv) == 2:
+        repl(tables)
+    else:
+        execute_query(sys.argv[2], tables)

@@ -118,12 +118,18 @@ class Query:
         table = self.all_tables[table_name]
         cols_to_keep = []
         for col_index, col in enumerate(table.cols):
-            if col in self.cols:
-                cols_to_keep.append(col_index)
-                cur_vtable_cols.append(col)
             if f"{table_name}.{col}" in self.cols:
                 cols_to_keep.append(col_index)
                 cur_vtable_cols.append(f"{table_name}.{col}")
+            elif col in self.cols:
+                cols_to_keep.append(col_index)
+                cur_vtable_cols.append(col)
+            elif self.cols == "*":
+                cols_to_keep.append(col_index)
+                if col in self.cols:
+                    cur_vtable_cols.append(f"{table_name}.{col}")
+                else:
+                    cur_vtable_cols.append(col)
         for row in table.data:
             filtered_row = [cell for index, cell in enumerate(row) if index in cols_to_keep]
             cur_vtable.append(filtered_row)

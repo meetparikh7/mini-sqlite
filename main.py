@@ -77,9 +77,13 @@ class Query:
         it = iter(self.query.tokens)
         self.tables = []
         self.cols = "*"
+        self.distinct = False
         for token in it:
             if token.ttype == sqlparse.tokens.Keyword.DML and token.value.upper() == "SELECT":
                 token = next(it, None)
+                if type(token) is sqlparse.sql.Token and token.value.upper() == "DISTINCT":
+                    self.distinct = True
+                    token = next(it, None)
                 if type(token) is sqlparse.sql.Identifier:
                     self.cols = [token.value]
                 elif type(token) is sqlparse.sql.IdentifierList:
@@ -147,10 +151,21 @@ class Query:
         if len(tables) > 1:
             self.join_tables(tables[1:])
 
+    def filter_distinct(self):
+        if not self.distinct:
+            return
+        new_vtable = []
+        for row in self.vtable:
+            if row in new_vtable:
+                continue
+            new_vtable.append(row)
+        self.vtable = new_vtable
+
     def execute(self):
         self.vtable = []
         self.vtable_cols = []
         self.join_tables(self.tables)
+        self.filter_distinct()
         return self.vtable_cols, self.vtable
 
 

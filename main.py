@@ -110,26 +110,41 @@ class Query:
         print("Cols", self.cols)
         print("From", self.tables)
 
-    def join_tables(self):
+    def join_tables(self, tables):
         # Assume temporarily only one table
-        table_name = self.tables[0]
+        cur_vtable = []
+        cur_vtable_cols = []
+        table_name = tables[0]
         table = self.all_tables[table_name]
         cols_to_keep = []
         for col_index, col in enumerate(table.cols):
             if col in self.cols:
                 cols_to_keep.append(col_index)
-                self.vtable_cols.append(col)
+                cur_vtable_cols.append(col)
             if f"{table_name}.{col}" in self.cols:
                 cols_to_keep.append(col_index)
-                self.vtable_cols.append(f"{table_name}.{col}")
+                cur_vtable_cols.append(f"{table_name}.{col}")
         for row in table.data:
             filtered_row = [cell for index, cell in enumerate(row) if index in cols_to_keep]
-            self.vtable.append(filtered_row)
+            cur_vtable.append(filtered_row)
+        if len(self.vtable) == 0:
+            self.vtable = cur_vtable
+            self.vtable_cols = cur_vtable_cols
+        else:
+            new_vtable = []
+            for row1 in self.vtable:
+                for row2 in cur_vtable:
+                    new_row = [*row1, *row2]
+                    new_vtable.append(new_row)
+            self.vtable_cols += cur_vtable_cols
+            self.vtable = new_vtable
+        if len(tables) > 1:
+            self.join_tables(tables[1:])
 
     def execute(self):
         self.vtable = []
         self.vtable_cols = []
-        self.join_tables()
+        self.join_tables(self.tables)
         return self.vtable_cols, self.vtable
 
 

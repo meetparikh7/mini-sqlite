@@ -104,6 +104,7 @@ class Query:
                     self.cols = "*"
                 else:
                     print(type(token), token)
+                self.selected_cols = '*' if self.cols == '*' else [col for col in self.cols]
             elif (
                 token.ttype == sqlparse.tokens.Keyword and token.value.upper() == "FROM"
             ):
@@ -174,6 +175,11 @@ class Query:
                 if type(simple_condition_tokens[2]) is sqlparse.sql.Identifier
                 else int(simple_condition_tokens[2].value)
             )
+            if self.cols != "*":
+                if type(operand1) is str and not operand1 in self.cols:
+                    self.cols.append(operand1)
+                if type(operand2) is str and not operand2 in self.cols:
+                    self.cols.append(operand2)
             return (op, operand1, operand2)
 
         # Compound stataments
@@ -197,6 +203,7 @@ class Query:
         print("Debugging query", self.query)
         print("Selecting")
         print("Cols", self.cols)
+        print("Selected cols", self.selected_cols)
         print("From", self.tables)
 
     def join_tables(self, tables):
@@ -294,12 +301,27 @@ class Query:
             new_vtable.append(row)
         self.vtable = new_vtable
 
+    # Remove extra cols in vtable, added due to where clause, but not selected
+    # Also organize table in selected_rows style
+    def organize_final_table(self):
+        if self.selected_cols == "*":
+            return
+        new_vtable = []
+        for row in self.vtable:
+            new_row = []
+            for col in self.selected_cols:
+                new_row.append(row[self.vtable_cols.index(col)])
+            new_vtable.append(new_row)
+        self.vtable = new_vtable
+        self.vtable_cols = self.selected_cols
+
     def execute(self):
         self.vtable = []
         self.vtable_cols = []
         self.join_tables(self.tables)
         self.filter_rows()
         self.filter_distinct()
+        self.organize_final_table()
         return self.vtable_cols, self.vtable
 
 
